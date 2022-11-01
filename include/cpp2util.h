@@ -645,9 +645,35 @@ inline constexpr auto is( auto const& x, auto const& value ) -> bool
 //-------------------------------------------------------------------------------------------------------------
 //  Built-in as
 //
-template< typename C >
-auto as(auto const&) -> auto {
-    return nonesuch;
+template <typename... Ts>
+inline constexpr auto program_violates_type_safety_guarantee = sizeof...(Ts) < 0;
+
+template< typename C, typename... Ts >
+auto as(Ts... ts) -> auto {
+    static_assert(program_violates_type_safety_guarantee<Ts...>, "safe 'as' cast is not defined");
+}
+
+struct narrowing_error : public std::exception
+{
+    const char* what() const noexcept override { return "narrowing_error"; }
+};
+
+template< typename C, typename X >
+    requires ( !std::is_same_v<C, X>
+               && std::is_arithmetic_v<C> && std::is_arithmetic_v<X>
+             )
+auto as( const X& x ) -> auto
+    requires (!requires { C{x}; })
+{
+    constexpr const bool is_different_signedness = (std::is_signed_v<C> != std::is_signed_v<X>);
+    const C value = static_cast<C>(x);
+
+    if (static_cast<X>(value) != x || (is_different_signedness && ((value < C{}) != (x < X{}))))
+    {
+        throw narrowing_error{};
+    }
+
+    return value;
 }
 
 template< typename C, typename X >
