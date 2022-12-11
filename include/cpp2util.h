@@ -645,11 +645,17 @@ inline constexpr auto is( auto const& x, auto const& value ) -> bool
 //-------------------------------------------------------------------------------------------------------------
 //  Built-in as
 //
+enum class failure_policy {
+    static_asserts,
+    optionals,
+    throws,
+};
+
 template <typename... Ts>
 inline constexpr auto program_violates_type_safety_guarantee = sizeof...(Ts) < 0;
 
-template< typename C, typename... Ts >
-auto as(Ts... ts) -> auto {
+template< cpp2::failure_policy policy, typename C, typename... Ts >
+inline constexpr auto as(Ts... ts) -> auto {
     static_assert(program_violates_type_safety_guarantee<Ts...>, "safe 'as' cast is not defined");
 }
 
@@ -658,11 +664,11 @@ struct narrowing_error : public std::exception
     const char* what() const noexcept override { return "narrowing_error"; }
 };
 
-template< typename C, typename X >
+template< cpp2::failure_policy policy, typename C, typename X >
     requires ( !std::is_same_v<C, X>
                && std::is_arithmetic_v<C> && std::is_arithmetic_v<X>
              )
-auto as( const X& x ) -> auto
+inline constexpr auto as( const X& x ) -> auto
     requires (!requires { C{x}; })
 {
     constexpr const bool is_different_signedness = (std::is_signed_v<C> != std::is_signed_v<X>);
@@ -670,50 +676,60 @@ auto as( const X& x ) -> auto
 
     if (static_cast<X>(value) != x || (is_different_signedness && ((value < C{}) != (x < X{}))))
     {
-        throw narrowing_error{};
+        if constexpr (policy == cpp2::failure_policy::throws) {
+            throw narrowing_error{};
+        } if constexpr (policy == cpp2::failure_policy::optionals) {
+            return std::optional<C>{};
+        } if constexpr (policy == cpp2::failure_policy::static_asserts) {
+            static_assert(program_violates_type_safety_guarantee<C, X>, "Unable to check correctness of this cast at compile-time!");
+        }
     }
 
-    return value;
+    if constexpr (policy == cpp2::failure_policy::optionals) {
+        return std::optional<C>{std::move(value)};
+    } else {
+        return value;
+    }
 }
 
-template< typename C, typename X >
+template< cpp2::failure_policy, typename C, typename X >
     requires std::is_same_v<C, X>
 auto as( X const& x ) -> decltype(auto) {
     return x;
 }
 
-template< typename C, typename X >
+template< cpp2::failure_policy, typename C, typename X >
 auto as( X const& x ) -> auto
     requires (!std::is_same_v<C, X> && requires { C{x}; })
 {
     return C{x};
 }
 
-template< typename C, typename X >
+template< cpp2::failure_policy, typename C, typename X >
     requires std::is_base_of_v<C, X>
 auto as( X&& x ) -> C&& {
     return std::forward<X>(x);
 }
 
-template< typename C, typename X >
+template< cpp2::failure_policy, typename C, typename X >
     requires (std::is_base_of_v<X, C> && !std::is_same_v<C,X>)
 auto as( X& x ) -> C& {
     return dynamic_cast<C&>(x);
 }
 
-template< typename C, typename X >
+template< cpp2::failure_policy, typename C, typename X >
     requires (std::is_base_of_v<X, C> && !std::is_same_v<C,X>)
 auto as( X const& x ) -> C const& {
     return dynamic_cast<C const&>(x);
 }
 
-template< typename C, typename X >
+template< cpp2::failure_policy, typename C, typename X >
     requires (std::is_base_of_v<X, C> && !std::is_same_v<C,X>)
 auto as( X* x ) -> C* {
     return dynamic_cast<C*>(x);
 }
 
-template< typename C, typename X >
+template< cpp2::failure_policy, typename C, typename X >
     requires (std::is_base_of_v<X, C> && !std::is_same_v<C,X>)
 auto as( X const* x ) -> C const* {
     return dynamic_cast<C const*>(x);
@@ -837,7 +853,7 @@ auto is( std::variant<Ts...> const& x ) {
     return false;
 }
 
-template<typename T, typename... Ts>
+template< cpp2::failure_policy policy, typename T, typename... Ts>
 auto as( std::variant<Ts...> const& x ) {
     if constexpr (std::is_same_v< CPP2_TYPEOF(operator_as< 0>(x)), T >) { if (x.index() ==  0) return operator_as<0>(x); }
     if constexpr (std::is_same_v< CPP2_TYPEOF(operator_as< 1>(x)), T >) { if (x.index() ==  1) return operator_as<1>(x); }
@@ -859,7 +875,13 @@ auto as( std::variant<Ts...> const& x ) {
     if constexpr (std::is_same_v< CPP2_TYPEOF(operator_as<17>(x)), T >) { if (x.index() == 17) return operator_as<7>(x); }
     if constexpr (std::is_same_v< CPP2_TYPEOF(operator_as<18>(x)), T >) { if (x.index() == 18) return operator_as<8>(x); }
     if constexpr (std::is_same_v< CPP2_TYPEOF(operator_as<19>(x)), T >) { if (x.index() == 19) return operator_as<9>(x); }
-    throw std::bad_variant_access();
+    if constexpr (policy == cpp2::failure_policy::throws) {
+        throw std::bad_variant_access();
+    } else if constexpr (policy == cpp2::failure_policy::optionals){
+        return std::optional<T>{};
+    } else {
+        static_assert(program_violates_type_safety_guarantee<T, std::variant<Ts...>>, "No safe 'as' cast available please use 'as!' (throwing cast) or 'as?' (cast to optional)");
+    }
 }
 
 
@@ -904,7 +926,7 @@ inline constexpr auto is( std::any const& x, auto const& value ) -> bool
 
 //  as
 //
-template<typename T, typename X>
+template< cpp2::failure_policy, typename T, typename X>
     requires (!std::is_reference_v<T> && std::is_same_v<X,std::any> && !std::is_same_v<T,std::any>)
 constexpr auto as( X const& x ) -> T
     { return std::any_cast<T>( x ); }
@@ -950,11 +972,14 @@ constexpr auto is( std::optional<T> const& x, auto const& value ) -> bool
 
 //  as
 //
-template<typename T, typename X>
+template<cpp2::failure_policy, typename T, typename X>
     requires std::is_same_v<X,std::optional<T>>
 constexpr auto as( X const& x ) -> decltype(auto)
     { return x.value(); }
 
+template<typename T, typename X>
+constexpr auto as( X&& x ) -> decltype(auto)
+    { return as<cpp2::failure_policy::static_asserts, T>(std::forward<X>(x));  }
 
 //-----------------------------------------------------------------------
 //

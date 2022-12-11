@@ -1992,7 +1992,12 @@ public:
             return;
         }
 
-        if (!n.terms.empty() && *n.terms.front().op == "as")
+        if (!n.terms.empty() && (
+                *n.terms.front().op == "as"
+                || *n.terms.front().op == "as!"
+                || *n.terms.front().op == "as?"
+                )
+        )
         {
             if (n.terms.size() > 1) {
                 errors.emplace_back(
@@ -2003,6 +2008,11 @@ public:
             }
 
             printer.print_cpp2("cpp2::as<", n.position());
+            if (*n.terms.front().op == "as!") {
+                printer.print_cpp2("cpp2::failure_policy::throws, ", n.position());
+            } else if (*n.terms.front().op == "as?") {
+                printer.print_cpp2("cpp2::failure_policy::optionals, ", n.position());
+            }
             emit(*n.terms.front().expr);
             printer.print_cpp2(">(", n.position());
 

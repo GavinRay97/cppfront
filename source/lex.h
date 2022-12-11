@@ -419,7 +419,7 @@ auto lex_line(
         //  Some keywords like "delete" and "union" are not in this list because we reject them elsewhere
         //  Cpp2 also adds a couple, notably "is" and "as"
         const auto keys = std::regex(
-            "^alignas|^alignof|^asm|^as|^auto|"
+            "^alignas|^alignof|^asm|^as\\?|^as!|^as|^auto|"
             "^bool|^break|"
             "^case|^catch|^char|^char16_t|^char32_t|^char8_t|^class|^co_await|^co_return|"
             "^co_yield|^concept|^const|^const_cast|^consteval|^constexpr|^constinit|^continue|"
