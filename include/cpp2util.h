@@ -654,15 +654,19 @@ enum class failure_policy {
 template <typename... Ts>
 inline constexpr auto program_violates_type_safety_guarantee = sizeof...(Ts) < 0;
 
-template< cpp2::failure_policy policy, typename C, typename... Ts >
-inline constexpr auto as(Ts... ts) -> auto {
-    static_assert(program_violates_type_safety_guarantee<Ts...>, "safe 'as' cast is not defined");
-}
-
 struct narrowing_error : public std::exception
 {
     const char* what() const noexcept override { return "narrowing_error"; }
 };
+
+template< cpp2::failure_policy policy, typename C, typename... Ts >
+inline constexpr auto as(Ts... ts) -> auto {
+    if constexpr (policy == cpp2::failure_policy::throws) {
+        throw narrowing_error{};
+    } else {
+        static_assert(program_violates_type_safety_guarantee<Ts...>, "safe 'as' cast is not defined");
+    } 
+}
 
 template< cpp2::failure_policy policy, typename C, typename X >
     requires ( !std::is_same_v<C, X>

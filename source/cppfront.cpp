@@ -1319,13 +1319,23 @@ public:
                     statement.pop_back();
                 }
 
+                auto replace_all = [](std::string inout, std::string_view what, std::string_view with){
+                    for (std::string::size_type pos{};
+                        inout.npos != (pos = inout.find(what.data(), pos, what.length()));
+                        pos += with.length()) {
+                        inout.replace(pos, what.length(), with.data(), with.length());
+                    }
+                    return inout;
+                };
+                auto internal_statement = replace_all(statement, "cpp2::as<", "cpp2::as<cpp2::failure_policy::throws, ");
+
                 //  If this is an inspect-expression, we'll have to wrap each alternative
                 //  in an 'if constexpr' so that its type is ignored for mismatches with
                 //  the inspect-expression's type
                 auto return_prefix = std::string{};
                 auto return_suffix = std::string{";"};   // use this to tack the ; back on in the alternative body
                 if (is_expression) {
-                    return_prefix = "{ if constexpr( requires{" + statement + ";} ) if constexpr( std::is_convertible_v<CPP2_TYPEOF((" + statement + "))," + result_type + "> ) return ";
+                    return_prefix = "{ if constexpr( requires{" + internal_statement + ";} ) if constexpr( std::is_convertible_v<CPP2_TYPEOF((" + internal_statement + "))," + result_type + "> ) return ";
                     return_suffix += " }";
                 }
 
@@ -1347,7 +1357,7 @@ public:
                     printer.print_cpp2(return_prefix, alt->position());
                 }
 
-                printer.print_cpp2(statement, alt->position());
+                printer.print_cpp2(internal_statement, alt->position());
 
                 if (is_expression && id != "_") {
                     assert(alt->statement->statement.index() == statement_node::expression);
