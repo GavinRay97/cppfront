@@ -696,6 +696,40 @@ inline constexpr auto as( const X& x ) -> auto
     }
 }
 
+// Workaroud for lack of support for floating point template argument by clang and MSVC
+struct double_wrapper {
+    double value = {};
+
+    template <typename T>
+        requires std::is_floating_point_v<T>
+    constexpr double_wrapper(T d) : value(d) {}
+
+    constexpr operator double() const {
+        return value;
+    }
+
+    template <typename T>
+    constexpr bool operator==(T rhs) const {
+        return value == rhs;
+    }
+};
+
+template< typename C, auto x, typename X >
+inline constexpr bool is_castable_v = std::is_arithmetic_v<C>
+                                        && std::is_arithmetic_v<X>
+                                        && !(static_cast<X>(static_cast<C>(x)) != x || ((std::is_signed_v<C> != std::is_signed_v<X>) && ((static_cast<C>(x) < C{}) != (x < X{}))));
+
+template< typename C, auto x, typename X>
+inline constexpr auto as() -> auto
+{
+    if constexpr ( is_castable_v<C, x, X> ) {
+        const C value = static_cast<C>(x);
+        return value;
+    } else {
+        static_assert(program_violates_type_safety_guarantee<C, X>, "No safe 'as' cast available please use 'as!' (throwing cast) or 'as?' (cast to optional)");
+    }
+}
+
 template< cpp2::failure_policy, typename C, typename X >
     requires std::is_same_v<C, X>
 auto as( X const& x ) -> decltype(auto) {
@@ -984,6 +1018,14 @@ constexpr auto as( X const& x ) -> decltype(auto)
 template<typename T, typename X>
 constexpr auto as( X&& x ) -> decltype(auto)
     { return as<cpp2::failure_policy::static_asserts, T>(std::forward<X>(x));  }
+
+template<typename T, auto x>
+constexpr auto as( ) -> decltype(auto)
+    { return as<T, x, decltype(x)>();  }
+
+template<typename T, double_wrapper x>
+constexpr auto as( ) -> decltype(auto)
+    { return as<T, x, double>();  }
 
 //-----------------------------------------------------------------------
 //

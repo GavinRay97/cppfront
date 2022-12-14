@@ -2023,12 +2023,32 @@ public:
             } else if (*n.terms.front().op == "as?") {
                 printer.print_cpp2("cpp2::failure_policy::optionals, ", n.position());
             }
+
+            auto is_one_of = [](auto value, auto... values) {
+                return (( value == values ) || ...);
+            };
+
             emit(*n.terms.front().expr);
-            printer.print_cpp2(">(", n.position());
+            if (auto lex_type = n.expr->get_postfix_expression_node()->expr->get_token()->type();
+                is_one_of(lex_type, lexeme::FloatLiteral
+                                  , lexeme::BinaryLiteral
+                                  , lexeme::DecimalLiteral
+                                  , lexeme::HexadecimalLiteral
+                                  , lexeme::CharacterLiteral
+                )
+                && *n.terms.front().op == "as"
+            )
+            {
+                printer.print_cpp2(", ", n.position());
+                emit(*n.expr);
+                printer.print_cpp2(">()", n.position());
+            } else {
+                printer.print_cpp2(">(", n.position());
 
-            emit(*n.expr);
+                emit(*n.expr);
 
-            printer.print_cpp2(")", n.position());
+                printer.print_cpp2(")", n.position());
+            }
             return;
         }
 
