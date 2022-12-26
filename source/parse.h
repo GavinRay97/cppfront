@@ -1673,7 +1673,7 @@ private:
         return binary_expression<is_as_expression_node> (
             [](token const& t){
                 std::string_view s{t};
-                return t.type() == lexeme::Keyword && (s == "is" || s == "as");
+                return t.type() == lexeme::Keyword && (s == "is" || s == "as" || s == "as?" || s == "as!");
             },
             [this]{ return prefix_expression(); }
         );
